@@ -1,0 +1,59 @@
+reservoir:
+  surface_area_m2: 50000      # m² — horizontal cross-section of the reservoir
+  setpoint_m: 5.0             # target water level (m above floor)
+  initial_level_m: 5.0        # starting water level
+  min_level_m: 2.0            # low alarm
+  max_level_m: 8.0            # high alarm
+
+hydraulics:
+  gravity: 9.81               # m/s²
+  river_level_m: 6.5          # upstream river level (m, relative to reservoir floor)
+  tailwater_level_m: 0.5      # downstream water level (m, relative to reservoir floor)
+
+input_gates:
+  - id: IG1
+    name: "Input Gate 1"
+    area_m2: 2.0
+    cd: 0.65
+    initial_opening: 0.30
+
+  - id: IG2
+    name: "Input Gate 2"
+    area_m2: 3.5
+    cd: 0.65
+    initial_opening: 0.30
+
+  - id: IG3
+    name: "Input Gate 3"
+    area_m2: 1.5
+    cd: 0.65
+    initial_opening: 0.20
+
+output_gates:
+  - id: OG1
+    name: "Output Gate 1"
+    area_m2: 1.5
+    cd: 0.65
+    initial_opening: 0.40
+
+  - id: OG2
+    name: "Output Gate 2"
+    area_m2: 4.0
+    cd: 0.65
+    initial_opening: 0.30
+
+  - id: OG3
+    name: "Output Gate 3"
+    area_m2: 2.5
+    cd: 0.65
+    initial_opening: 0.35
+
+control:
+  kp: 0.0002         # proportional gain  (m³/s per m error)
+  ki: 0.00002        # integral gain       (m³/s per m·s error)
+  estimator_window: 20   # samples for smoothed dh/dt calculation
+  control_dt: 2.0        # seconds between each control decision
+
+simulation:
+  dt: 0.5            # simulation timestep (seconds)
+  speed_multiplier: 20   # sim seconds per real second (UI playback speed)
