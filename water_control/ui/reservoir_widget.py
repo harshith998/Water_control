@@ -48,8 +48,10 @@ class ReservoirWidget(QWidget):
         self.setpoint = config["reservoir"]["setpoint_m"]
 
         self.openings: dict = {}
+        self.target_openings: dict = {}
         for g in config["input_gates"] + config["output_gates"]:
             self.openings[g["id"]] = g["initial_opening"]
+            self.target_openings[g["id"]] = g["initial_opening"]
 
         self.input_gates = config["input_gates"]
         self.output_gates = config["output_gates"]
@@ -65,6 +67,8 @@ class ReservoirWidget(QWidget):
     def update_state(self, snapshot: dict):
         self.h = snapshot["h"]
         self.openings.update(snapshot["openings"])
+        if "target_openings" in snapshot:
+            self.target_openings.update(snapshot["target_openings"])
         self.update()  # trigger repaint
 
     # ------------------------------------------------------------------
@@ -152,7 +156,8 @@ class ReservoirWidget(QWidget):
             gy = y_positions_in[i]
             rect = QRect(gate_x_in, gy, GATE_W, gh_in)
             self._gate_rects[gid] = rect
-            self._draw_gate(painter, rect, opening, COL_INPUT_FILL, gid)
+            target = self.target_openings.get(gid, opening)
+            self._draw_gate(painter, rect, opening, target, COL_INPUT_FILL, gid)
 
             # Arrow pointing right into reservoir
             painter.setPen(QPen(QColor(150, 180, 220), 1))
@@ -174,7 +179,8 @@ class ReservoirWidget(QWidget):
             gy = y_positions_out[i]
             rect = QRect(gate_x_out, gy, GATE_W, gh_out)
             self._gate_rects[gid] = rect
-            self._draw_gate(painter, rect, opening, COL_OUTPUT_FILL, gid)
+            target = self.target_openings.get(gid, opening)
+            self._draw_gate(painter, rect, opening, target, COL_OUTPUT_FILL, gid)
 
             # Arrow pointing right out of reservoir
             painter.setPen(QPen(QColor(120, 200, 140), 1))
@@ -192,28 +198,43 @@ class ReservoirWidget(QWidget):
 
         painter.end()
 
-    def _draw_gate(self, painter: QPainter, rect: QRect, opening: float, fill_color: QColor, label: str):
-        """Draw a single gate rectangle with fill proportional to opening."""
+    def _draw_gate(self, painter: QPainter, rect: QRect, opening: float, target: float,
+                   fill_color: QColor, label: str):
+        """
+        Draw a single gate rectangle.
+        - fill (solid color) = actual physical position
+        - white dashed line   = commanded target position (where gate is heading)
+        """
         # Background
         painter.fillRect(rect, COL_GATE_BG)
 
-        # Fill (bottom up, like a rising water gate)
+        # Actual fill (bottom up)
         fill_h = int(rect.height() * opening)
         if fill_h > 0:
             fill_rect = QRect(rect.left(), rect.bottom() - fill_h + 1, rect.width(), fill_h)
             painter.fillRect(fill_rect, fill_color)
 
+        # Target indicator line (white dashed) — shows where gate is commanded to go
+        if abs(target - opening) > 0.005:   # only draw if there's a meaningful difference
+            target_y = rect.bottom() - int(rect.height() * target)
+            pen = QPen(QColor(255, 255, 255, 200), 2, Qt.DashLine)
+            painter.setPen(pen)
+            painter.drawLine(rect.left(), target_y, rect.right(), target_y)
+
         # Border
         painter.setPen(QPen(COL_GATE_BORDER, 1))
         painter.drawRect(rect)
 
-        # Label below
+        # Label below (gate id)
         painter.setPen(COL_TEXT)
         painter.setFont(QFont("Monospace", 7))
         painter.drawText(rect.left() - 2, rect.bottom() + 14, label)
 
-        # Opening % above
-        pct = f"{int(opening * 100)}%"
+        # Actual % above; target % in parentheses if different
+        if abs(target - opening) > 0.005:
+            pct = f"{int(opening * 100)}%→{int(target * 100)}%"
+        else:
+            pct = f"{int(opening * 100)}%"
         painter.setFont(QFont("Monospace", 7))
         painter.drawText(rect.left() - 2, rect.top() - 3, pct)
 

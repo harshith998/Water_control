@@ -1,5 +1,5 @@
 reservoir:
-  surface_area_m2: 50000      # m² — horizontal cross-section of the reservoir
+  surface_area_m2: 500      # m² — horizontal cross-section of the reservoir
   setpoint_m: 5.0             # target water level (m above floor)
   initial_level_m: 5.0        # starting water level
   min_level_m: 2.0            # low alarm
@@ -16,18 +16,21 @@ input_gates:
     area_m2: 2.0
     cd: 0.65
     initial_opening: 0.30
+    travel_time_s: 60.0      # seconds to go from 0% to 100% open
 
   - id: IG2
     name: "Input Gate 2"
     area_m2: 3.5
     cd: 0.65
     initial_opening: 0.30
+    travel_time_s: 60.0
 
   - id: IG3
     name: "Input Gate 3"
     area_m2: 1.5
     cd: 0.65
     initial_opening: 0.20
+    travel_time_s: 60.0
 
 output_gates:
   - id: OG1
@@ -35,22 +38,25 @@ output_gates:
     area_m2: 1.5
     cd: 0.65
     initial_opening: 0.40
+    travel_time_s: 60.0
 
   - id: OG2
     name: "Output Gate 2"
     area_m2: 4.0
     cd: 0.65
     initial_opening: 0.30
+    travel_time_s: 60.0
 
   - id: OG3
     name: "Output Gate 3"
     area_m2: 2.5
     cd: 0.65
     initial_opening: 0.35
+    travel_time_s: 60.0
 
 control:
-  kp: 0.0002         # proportional gain  (m³/s per m error)
-  ki: 0.00002        # integral gain       (m³/s per m·s error)
+  kp: 50.0           # proportional gain  (m³/s per m error)
+  ki: 0.5            # integral gain       (m³/s per m·s error)
   estimator_window: 20   # samples for smoothed dh/dt calculation
   control_dt: 2.0        # seconds between each control decision
 

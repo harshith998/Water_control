@@ -1,5 +1,116 @@
 # Water Dam Gate Control System — Architecture & Usage Guide
 
+---
+
+## FOR AKIRA — What to Measure at the Facility
+
+This is the complete list of real-world values you need to collect on-site. Everything here maps directly into `config.yaml` and the simulation/control system.
+
+---
+
+### 1. Gates — Count & Identity
+
+- How many **input gates** are there? (gates that let river water INTO the reservoir)
+- How many **output gates** are there? (gates that release water FROM the reservoir downstream)
+- Give each gate a label (e.g. IG1, IG2 / OG1, OG2) so we can track them individually.
+
+---
+
+### 2. Gate Size — Area (m²)
+
+For each gate, measure:
+
+- **Width** (m) × **Height** (m) = gate area in m²
+- This is the area when the gate is **fully open** (100% opening)
+- Every gate can have a different size — measure each one separately
+
+> This goes into `area_m2` in config.yaml for each gate.
+
+---
+
+### 3. Discharge Coefficient — Cd (experimentally measured)
+
+Cd accounts for the fact that real water flow is never perfectly efficient (turbulence, friction, gate geometry). It is always between 0 and 1, typically around 0.6–0.7.
+
+**How to find it:**
+
+1. Set a gate to a known fixed opening (e.g. 50%)
+2. Measure the actual flow rate through it — Q_measured (m³/s)
+   *(use a flow meter, bucket + stopwatch, or ultrasonic sensor)*
+3. Measure the head difference across the gate — ΔH (m)
+   *(water level upstream minus water level downstream)*
+4. Back-calculate Cd from the orifice equation:
+
+```
+Cd = Q_measured / ( A × opening × √(2 × 9.81 × ΔH) )
+```
+
+Repeat this for a few different openings and average the results. Each gate may have a slightly different Cd due to shape and wear.
+
+> This goes into `cd` in config.yaml for each gate.
+
+---
+
+### 4. Water Levels — Fixed Reference Points (m)
+
+You need three elevation measurements, all on the **same datum** (e.g. sea level or a local reference point):
+
+| Value | What to measure | config.yaml key |
+|-------|----------------|-----------------|
+| River/upstream level | Water surface height on the inlet side of input gates | `river_level_m` |
+| Tailwater/downstream level | Water surface height on the outlet side of output gates | `tailwater_level_m` |
+| Reservoir surface area | Horizontal area of the reservoir (m²) — from engineering drawings or satellite measurement | `surface_area_m2` |
+
+Also define your operational limits:
+
+| Value | What it means | config.yaml key |
+|-------|--------------|-----------------|
+| Target level | The water level you want to maintain | `setpoint_m` |
+| Low alarm level | Minimum safe level before intervention | `min_level_m` |
+| High alarm level | Maximum safe level before flood risk | `max_level_m` |
+
+---
+
+### 5. Gate Actuation Speed — How Fast Can a Gate Move?
+
+**This is critical.** A gate does not instantly jump from 30% to 80% open — it moves gradually driven by a motor or hydraulic actuator. If the controller ignores this, it will issue commands that the physical gate cannot execute in time.
+
+For each gate (or gate type, if they all use the same actuator), measure:
+
+- **Full travel time** — how many seconds does it take to go from fully closed (0%) to fully open (100%)?
+- From this, derive the **rate limit** in units of **% opening per second**:
+
+```
+rate_limit (%/s) = 100% / full_travel_time_seconds
+
+Example: gate takes 40 seconds to go 0→100%
+→ rate_limit = 100 / 40 = 2.5 %/s
+```
+
+- Also note if open and close speeds differ (some actuators are faster in one direction)
+
+> **Impact on the control system:** The controller must never command a gate to change faster than this rate. We will add a **rate limiter** constraint per gate so commanded openings are clamped to physically achievable movements each timestep. This means the simulation's `control_dt` and `dt` parameters need to be set relative to actual gate speeds.
+
+---
+
+### Summary Checklist
+
+| # | What to measure | Unit | Notes |
+|---|----------------|------|-------|
+| 1 | Number of input gates | count | Label each one |
+| 2 | Number of output gates | count | Label each one |
+| 3 | Width × height of each gate | m² | Fully-open area |
+| 4 | Discharge coefficient Cd for each gate | dimensionless (0–1) | Measure experimentally |
+| 5 | Upstream river water level | m | On a consistent datum |
+| 6 | Downstream tailwater level | m | On same datum |
+| 7 | Reservoir horizontal surface area | m² | From drawings or survey |
+| 8 | Target operating water level (setpoint) | m | Operational requirement |
+| 9 | Low and high alarm thresholds | m | Safety limits |
+| 10 | Gate full-travel time (0% → 100%) | seconds | Per gate or actuator type |
+| 11 | Gate close speed if different from open | seconds | Some actuators differ |
+
+---
+
 ## Table of Contents
 
 - [Overview](#overview)

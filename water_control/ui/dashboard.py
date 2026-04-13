@@ -94,12 +94,17 @@ class TimeSeriesCanvas(FigureCanvas):
         ax.set_ylabel("Level (m)", color="#8090a8", fontsize=8)
         ax.grid(color="#2a3450", linewidth=0.5, linestyle="--")
 
-    def update_plot(self, times, levels, setpoint, min_l, max_l, river_levels=None):
+    def update_plot(self, times, levels, setpoint, min_l, max_l, river_levels=None,
+                    accuracy_band=0.1):
         self.ax.cla()
         self._style_axes()
 
         t = np.array(times)
         h = np.array(levels)
+
+        # Accuracy band (±accuracy_band around setpoint)
+        self.ax.axhspan(setpoint - accuracy_band, setpoint + accuracy_band,
+                        color="#f0c040", alpha=0.08, label=f"±{accuracy_band*1000:.0f}mm band")
 
         self.ax.plot(t, h, color="#5ab0f0", linewidth=1.4, label="Water level")
 
@@ -285,11 +290,14 @@ class Dashboard(QMainWindow):
         self.lbl_Q_net    = _label("Q_net: --", size=9)
         self.lbl_dhdt     = _label("dh/dt: --", size=9)
         self.lbl_river    = _label("River lvl: --", size=9)
+        self.lbl_avg_dev  = _label("Avg dev: --", bold=True, size=9)
+        self.lbl_rmse     = _label("RMSE: --", size=9)
         self.lbl_time     = _label("Sim time: 0 s", size=8, color="#8090a8")
 
         for w in [self.lbl_level, self.lbl_setpoint, self.lbl_Q_in,
                   self.lbl_Q_out, self.lbl_Q_net, self.lbl_dhdt,
-                  self.lbl_river, self.lbl_time]:
+                  self.lbl_river, self.lbl_avg_dev, self.lbl_rmse,
+                  self.lbl_time]:
             layout.addWidget(w)
 
         return box
@@ -415,12 +423,14 @@ class Dashboard(QMainWindow):
         if self._time_since_control >= self.control_dt:
             self._time_since_control = 0.0
 
-            Q_net_target = self.controller.compute(snap["h"], self.control_dt)
+            Q_net_target = self.controller.compute(snap["h"], self.control_dt,
+                                                    update_integral=self.auto_control)
 
-            # Compute options
+            # Compute options — use target positions so optimizer plans from where
+            # gates are heading, not an intermediate mid-travel position
             self._options = find_top5_options(
-                self.sim.input_gates_current(),
-                self.sim.output_gates_current(),
+                self.sim.input_gates_target(),
+                self.sim.output_gates_target(),
                 snap["h"],
                 river_level,
                 snap["tailwater"],
@@ -467,6 +477,17 @@ class Dashboard(QMainWindow):
         self.lbl_dhdt.setText(f"dh/dt: {dhdt*1000:+.4f} mm/s")
         self.lbl_dhdt.setStyleSheet(f"color: {dhdt_color}; background: transparent;")
         self.lbl_river.setText(f"River lvl: {snap['river_level']:.2f} m")
+
+        # Deviation metrics from history
+        errors = self.sim.history_error
+        if len(errors) > 1:
+            err_arr = np.array(errors)
+            avg_dev = float(np.mean(err_arr)) * 1000   # mm
+            rmse    = float(np.sqrt(np.mean(err_arr ** 2))) * 1000   # mm
+            dev_color = GREEN if avg_dev < 5 else (AMBER if avg_dev < 20 else RED)
+            self.lbl_avg_dev.setText(f"Avg dev: {avg_dev:.1f} mm")
+            self.lbl_avg_dev.setStyleSheet(f"color: {dev_color}; background: transparent; font-weight: bold;")
+            self.lbl_rmse.setText(f"RMSE: {rmse:.1f} mm")
         self.lbl_time.setText(f"Sim time: {snap['t']:.0f} s")
 
         # Reservoir widget
@@ -481,6 +502,7 @@ class Dashboard(QMainWindow):
                 snap["min_level"],
                 snap["max_level"],
                 river_levels=self.sim.history_river,
+                accuracy_band=0.005,
             )
 
     def _refresh_options(self):
@@ -494,8 +516,8 @@ class Dashboard(QMainWindow):
         self.controller._integral -= Q_net_target / max(self.controller.ki * self.control_dt, 1e-9)
 
         self._options = find_top5_options(
-            self.sim.input_gates_current(),
-            self.sim.output_gates_current(),
+            self.sim.input_gates_target(),
+            self.sim.output_gates_target(),
             snap["h"],
             river_level,
             snap["tailwater"],
@@ -557,7 +579,11 @@ class Dashboard(QMainWindow):
         self._sim_timer.setInterval(interval_ms)
 
     def _on_auto_toggle(self, state):
+        was_off = not self.auto_control
         self.auto_control = bool(state)
+        # Reset integral when re-enabling so windup from the off-period doesn't persist
+        if self.auto_control and was_off:
+            self.controller.reset()
 
     # ------------------------------------------------------------------
     # Theme

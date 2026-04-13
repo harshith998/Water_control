@@ -23,7 +23,9 @@ from .hydraulics import gate_flow
 MAX_K = 3
 
 # Tolerance: within this fraction of total gate capacity we call it "solved"
-FLOW_TOLERANCE_FRACTION = 0.02
+# 0.002 = 0.2% of capacity (~0.15 m³/s), tight enough that a 0.675 m³/s
+# deviation is NOT within tolerance and forces the optimizer to find a better option.
+FLOW_TOLERANCE_FRACTION = 0.002
 
 
 def _build_gate_list(input_gates: list, output_gates: list, dh_in: float, dh_out: float) -> list:
@@ -171,8 +173,11 @@ def find_top5_options(
                 "openings": new_openings,
             })
 
-        # Re-sort and prune after each k level
-        candidates.sort(key=lambda c: (c["num_changes"], c["deviation"]))
+        # Re-sort and prune after each k level.
+        # Solutions within tolerance rank before solutions outside tolerance
+        # (even if they require more gate changes). Within each group, prefer
+        # fewer gate changes, then smaller deviation.
+        candidates.sort(key=lambda c: (c["deviation"] > tolerance, c["num_changes"], c["deviation"]))
         candidates = candidates[:5]
 
         # If we already have 5 good solutions, stop early
